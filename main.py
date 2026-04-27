@@ -50,6 +50,13 @@ def run_self_check() -> int:
         print(f"- lz4：不可用 ({e})")
         return 1
 
+    try:
+        import PyQt6  # noqa: F401
+        print("- PyQt6：可用")
+    except Exception as e:
+        print(f"- PyQt6：不可用 ({e})")
+        return 1
+
     print("- 自检完成：环境正常")
     return 0
 
