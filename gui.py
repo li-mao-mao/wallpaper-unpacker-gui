@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPlainTextEdit,
     QSizePolicy,
-    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +29,26 @@ from app.local_state import get_app_dir, load_settings, save_settings
 
 PROJECT_LINK_TEXT = "Wallpaper-Unpacker-GUI"
 PROJECT_LINK_URL = "https://github.com/li-mao-mao/wallpaper-unpacker-gui"
+
+
+def _build_stat_item(icon: str, text: str, value_label: QLabel) -> QWidget:
+    row = QWidget()
+    row.setObjectName("statRow")
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(2, 2, 2, 2)
+    layout.setSpacing(8)
+
+    icon_label = QLabel(icon)
+    icon_label.setObjectName("statIcon")
+    name_label = QLabel(text)
+    name_label.setObjectName("statName")
+    value_label.setObjectName("statValue")
+    value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+    layout.addWidget(icon_label)
+    layout.addWidget(name_label, 1)
+    layout.addWidget(value_label)
+    return row
 
 
 class MainWindow(QMainWindow):
@@ -60,28 +79,110 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
-        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setContentsMargins(14, 14, 14, 14)
         outer.setSpacing(10)
 
+        # 顶部标题栏
+        top_bar = QWidget()
+        top_bar.setObjectName("topBar")
+        top_layout = QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(16, 12, 16, 12)
+        top_layout.setSpacing(12)
+
+        app_icon = QLabel("⬡")
+        app_icon.setObjectName("appIcon")
+        app_icon.setFixedSize(54, 54)
+        app_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        title_wrap = QVBoxLayout()
+        title_wrap.setSpacing(3)
         title = QLabel("Wallpaper-Unpacker-GUI")
         title.setObjectName("title")
         subtitle = QLabel("一个让用户能够轻松从 Wallpaper Engine 壁纸包（.pkg / .tex）中提取原始图片的图形化工具")
         subtitle.setObjectName("subtitle")
-        link = QLabel(f'<a href="{PROJECT_LINK_URL}">{PROJECT_LINK_TEXT}</a>')
-        link.setOpenExternalLinks(True)
-        link.setAlignment(Qt.AlignmentFlag.AlignRight)
-        link.setObjectName("link")
-        top_row = QHBoxLayout()
-        top_row.addWidget(title, 1)
-        top_row.addWidget(link)
-        outer.addLayout(top_row)
-        outer.addWidget(subtitle)
+        title_wrap.addWidget(title)
+        title_wrap.addWidget(subtitle)
+        top_layout.addWidget(app_icon)
+        top_layout.addLayout(title_wrap, 1)
+
+        btn_home = QPushButton("项目主页")
+        btn_docs = QPushButton("使用文档")
+        btn_about = QPushButton("关于工具")
+        btn_home.setObjectName("navButton")
+        btn_docs.setObjectName("navButton")
+        btn_about.setObjectName("navButton")
+        btn_home.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(PROJECT_LINK_URL)))
+        btn_docs.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(PROJECT_LINK_URL + "#readme")))
+        btn_about.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(PROJECT_LINK_URL)))
+        top_layout.addWidget(btn_home)
+        top_layout.addWidget(btn_docs)
+        top_layout.addWidget(btn_about)
+        outer.addWidget(top_bar)
+
+        # 中间主体：左侧信息栏 + 右侧主功能区
+        body = QHBoxLayout()
+        body.setSpacing(10)
+        outer.addLayout(body, 1)
+
+        left_panel = QWidget()
+        left_panel.setObjectName("leftPanel")
+        left_panel.setFixedWidth(250)
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(10)
+
+        home_chip = QPushButton("首页")
+        home_chip.setObjectName("homeChip")
+        home_chip.setEnabled(False)
+        left_layout.addWidget(home_chip)
+
+        stats_group = QGroupBox("运行概览")
+        stats_layout = QVBoxLayout(stats_group)
+        stats_layout.setContentsMargins(10, 10, 10, 10)
+        stats_layout.setSpacing(5)
+        self.estimated_total_label = QLabel("0")
+        self.summary_total_label = QLabel("0")
+        self.summary_success_label = QLabel("0")
+        self.summary_skipped_label = QLabel("0")
+        self.summary_failed_label = QLabel("0")
+        stats_layout.addWidget(_build_stat_item("📦", "预计任务", self.estimated_total_label))
+        stats_layout.addWidget(_build_stat_item("🧾", "总计", self.summary_total_label))
+        stats_layout.addWidget(_build_stat_item("✅", "成功", self.summary_success_label))
+        stats_layout.addWidget(_build_stat_item("⏭", "跳过", self.summary_skipped_label))
+        stats_layout.addWidget(_build_stat_item("❌", "失败", self.summary_failed_label))
+        left_layout.addWidget(stats_group)
+
+        local_group = QGroupBox("本地化说明")
+        local_layout = QVBoxLayout(local_group)
+        self.local_path_label = QLabel(str(get_app_dir()))
+        self.local_path_label.setWordWrap(True)
+        local_layout.addWidget(QLabel("工具完全本地运行，不会上传任何数据。"))
+        local_layout.addWidget(self.local_path_label)
+        left_layout.addWidget(local_group)
+
+        run_group = QGroupBox("最近运行")
+        run_layout = QVBoxLayout(run_group)
+        self.last_run_label = QLabel(self.settings.get("last_run_time", "尚未运行"))
+        run_layout.addWidget(self.last_run_label)
+        left_layout.addWidget(run_group)
+        left_layout.addStretch(1)
+
+        version_label = QLabel("v1.0.0")
+        version_label.setObjectName("versionLabel")
+        left_layout.addWidget(version_label)
+        body.addWidget(left_panel)
+
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
+        body.addWidget(right_panel, 1)
 
         form_box = QGroupBox("路径与选项")
         form_layout = QGridLayout(form_box)
         form_layout.setHorizontalSpacing(8)
         form_layout.setVerticalSpacing(10)
-        outer.addWidget(form_box)
+        right_layout.addWidget(form_box)
 
         self.input_edit = QLineEdit(self.settings.get("last_input", ""))
         self.output_edit = QLineEdit(self.settings.get("last_output", ""))
@@ -124,78 +225,38 @@ class MainWindow(QMainWindow):
         form_layout.addWidget(self.output_rule_label, 3, 0, 1, 3)
 
         toolbar = QHBoxLayout()
-        outer.addLayout(toolbar)
         btn_start = QPushButton("开始导出")
         btn_stop = QPushButton("停止")
         btn_clear = QPushButton("清空日志")
         btn_open_app = QPushButton("打开本地运行目录")
+        btn_start.setObjectName("primaryButton")
+        btn_stop.setObjectName("secondaryButton")
+        btn_open_app.setObjectName("secondaryButton")
+        btn_clear.setObjectName("subtleButton")
         self.status_label = QLabel("就绪")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         toolbar.addWidget(btn_start)
         toolbar.addWidget(btn_stop)
-        toolbar.addWidget(btn_clear)
         toolbar.addWidget(btn_open_app)
         toolbar.addStretch(1)
         toolbar.addWidget(self.status_label)
+        right_layout.addLayout(toolbar)
 
         self.progress_text_label = QLabel("等待开始")
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        outer.addWidget(self.progress_text_label)
-        outer.addWidget(self.progress_bar)
+        right_layout.addWidget(self.progress_text_label)
+        right_layout.addWidget(self.progress_bar)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        outer.addWidget(splitter, 1)
-
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(8)
-        splitter.addWidget(left_panel)
-
-        stats_group = QGroupBox("运行概览")
-        stats_layout = QGridLayout(stats_group)
-        left_layout.addWidget(stats_group)
-        self.estimated_total_label = QLabel("0")
-        self.summary_total_label = QLabel("0")
-        self.summary_success_label = QLabel("0")
-        self.summary_skipped_label = QLabel("0")
-        self.summary_failed_label = QLabel("0")
-        self.last_run_label = QLabel(self.settings.get("last_run_time", "尚未运行"))
-        self.local_path_label = QLabel(str(get_app_dir()))
-        self.local_path_label.setWordWrap(True)
-
-        stats_layout.addWidget(QLabel("预计任务"), 0, 0)
-        stats_layout.addWidget(self.estimated_total_label, 0, 1)
-        stats_layout.addWidget(QLabel("总计"), 1, 0)
-        stats_layout.addWidget(self.summary_total_label, 1, 1)
-        stats_layout.addWidget(QLabel("成功"), 2, 0)
-        stats_layout.addWidget(self.summary_success_label, 2, 1)
-        stats_layout.addWidget(QLabel("跳过"), 3, 0)
-        stats_layout.addWidget(self.summary_skipped_label, 3, 1)
-        stats_layout.addWidget(QLabel("失败"), 4, 0)
-        stats_layout.addWidget(self.summary_failed_label, 4, 1)
-
-        local_group = QGroupBox("本地化说明")
-        local_layout = QVBoxLayout(local_group)
-        local_layout.addWidget(QLabel("本工具完全本地运行，不会上传任何数据。"))
-        local_layout.addWidget(self.local_path_label)
-        left_layout.addWidget(local_group)
-
-        run_group = QGroupBox("最近运行")
-        run_layout = QVBoxLayout(run_group)
-        run_layout.addWidget(self.last_run_label)
-        left_layout.addWidget(run_group)
-        left_layout.addStretch(1)
-
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(8)
-        splitter.addWidget(right_panel)
-
-        right_layout.addWidget(QLabel("处理日志"))
+        log_head = QHBoxLayout()
+        log_head.addWidget(QLabel("处理日志"))
+        log_head.addStretch(1)
+        btn_export_log = QPushButton("导出日志")
+        btn_export_log.setObjectName("subtleButton")
+        log_head.addWidget(btn_clear)
+        log_head.addWidget(btn_export_log)
+        right_layout.addLayout(log_head)
         self.log_text = QPlainTextEdit()
         self.log_text.setReadOnly(True)
         fixed_font = QFont("Consolas")
@@ -204,8 +265,6 @@ class MainWindow(QMainWindow):
         self.log_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         right_layout.addWidget(self.log_text, 1)
         self._append_log("欢迎使用。本工具完全离线运行，日志与配置仅存本机。")
-
-        splitter.setSizes([290, 860])
 
         self.input_edit.textChanged.connect(self._on_path_changed)
         self.output_edit.textChanged.connect(self._persist_settings)
@@ -218,22 +277,109 @@ class MainWindow(QMainWindow):
         btn_start.clicked.connect(self.start_extract)
         btn_stop.clicked.connect(self.request_cancel)
         btn_clear.clicked.connect(self.clear_log)
+        btn_export_log.clicked.connect(self.export_log)
         btn_open_app.clicked.connect(self.open_app_dir)
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
             """
-            QMainWindow, QWidget { background: #eef3fb; color: #0f172a; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 13px; }
-            QGroupBox { border: 1px solid #dbe3f3; border-radius: 8px; margin-top: 10px; background: #ffffff; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: #334155; font-weight: 600; }
-            QLineEdit, QPlainTextEdit { background: #ffffff; border: 1px solid #cfd7e7; border-radius: 6px; padding: 6px; }
-            QPushButton { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; }
-            QPushButton:hover { border-color: #94a3b8; }
-            QProgressBar { border: 1px solid #cfd7e7; border-radius: 6px; text-align: center; background: #ffffff; min-height: 20px; }
-            QProgressBar::chunk { background: #2563eb; border-radius: 5px; }
-            QLabel#title { font-size: 24px; font-weight: 700; }
-            QLabel#subtitle { color: #475569; }
-            QLabel#link { color: #2563eb; }
+            QMainWindow, QWidget {
+                background: #f4f6fb;
+                color: #111827;
+                font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+                font-size: 13px;
+            }
+            QWidget#topBar {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+            }
+            QLabel#appIcon {
+                background: #eef2ff;
+                color: #4f46e5;
+                border: 1px solid #dbe2ff;
+                border-radius: 12px;
+                font-size: 24px;
+                font-weight: 700;
+            }
+            QLabel#title { font-size: 38px; font-weight: 800; }
+            QLabel#subtitle { color: #6b7280; font-size: 14px; }
+            QWidget#leftPanel {
+                background: #f7f8fc;
+                border: 1px solid #e6e8ef;
+                border-radius: 12px;
+            }
+            QGroupBox {
+                border: 1px solid #e5e7eb;
+                border-radius: 10px;
+                margin-top: 10px;
+                background: #ffffff;
+                font-weight: 600;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+                color: #374151;
+            }
+            QLineEdit, QPlainTextEdit {
+                background: #ffffff;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                padding: 6px;
+            }
+            QPushButton {
+                background: #ffffff;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                padding: 7px 12px;
+            }
+            QPushButton:hover { border-color: #9ca3af; }
+            QPushButton#primaryButton {
+                background: #3b82f6;
+                color: #ffffff;
+                border: 1px solid #3b82f6;
+            }
+            QPushButton#primaryButton:hover { background: #2563eb; border-color: #2563eb; }
+            QPushButton#navButton {
+                background: #f9fafb;
+                min-width: 92px;
+                min-height: 34px;
+            }
+            QPushButton#homeChip {
+                background: #e9efff;
+                border: 1px solid #d6e2ff;
+                color: #1d4ed8;
+                text-align: left;
+                font-weight: 600;
+                min-height: 34px;
+                padding-left: 10px;
+            }
+            QPushButton#secondaryButton { min-height: 34px; }
+            QPushButton#subtleButton {
+                background: #f8fafc;
+                min-height: 34px;
+            }
+            QLabel#versionLabel { color: #6b7280; }
+            QWidget#statRow {
+                background: #ffffff;
+                border: 1px solid #edf0f4;
+                border-radius: 8px;
+            }
+            QLabel#statIcon { min-width: 18px; color: #6b7280; }
+            QLabel#statName { color: #4b5563; }
+            QLabel#statValue { color: #111827; font-weight: 700; min-width: 30px; }
+            QProgressBar {
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
+                text-align: center;
+                background: #ffffff;
+                min-height: 20px;
+            }
+            QProgressBar::chunk {
+                background: #22c55e;
+                border-radius: 7px;
+            }
             """
         )
 
@@ -364,6 +510,17 @@ class MainWindow(QMainWindow):
         self.summary_success_label.setText("0")
         self.summary_skipped_label.setText("0")
         self.summary_failed_label.setText("0")
+
+    def export_log(self) -> None:
+        default_name = f"wallpaper-unpacker-log-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+        path, _ = QFileDialog.getSaveFileName(self, "导出日志", default_name, "文本文件 (*.txt)")
+        if not path:
+            return
+        try:
+            Path(path).write_text(self.log_text.toPlainText(), encoding="utf-8")
+            self._append_log(f"日志已导出：{path}")
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"无法导出日志：{e}")
 
     def pick_input_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "选择输入文件", "", "Package/Tex 文件 (*.pkg *.tex);;所有文件 (*.*)")
