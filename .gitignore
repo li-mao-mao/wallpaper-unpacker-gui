@@ -44,3 +44,4 @@ Thumbs.db
 # Logs and local runtime outputs
 *.log
 *.tmp
+uv.lock

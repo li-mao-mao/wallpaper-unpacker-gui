@@ -45,8 +45,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Wallpaper-Unpacker-GUI")
-        self.resize(1540, 1000)
-        self.setMinimumSize(1100, 720)
+        self.resize(1280, 820)
+        self.setMinimumSize(760, 560)
 
         self.settings = load_settings()
         self.running = False
@@ -56,9 +56,14 @@ class MainWindow(QMainWindow):
         self.progress_queue: "queue.Queue[dict]" = queue.Queue()
         self.estimate_queue: "queue.Queue[int | str]" = queue.Queue()
         self.icons = load_icons()
+        self.top_actions: list[QPushButton] = []
+        self.path_rows: list[dict[str, QWidget]] = []
+        self.path_buttons: list[QPushButton] = []
+        self.action_buttons: list[QPushButton] = []
 
         self._build_ui()
         self._apply_styles()
+        self._update_responsive_layout()
 
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self._poll_queues)
@@ -69,12 +74,18 @@ class MainWindow(QMainWindow):
         root.setObjectName("root")
         self.setCentralWidget(root)
 
-        shell = QHBoxLayout(root)
-        shell.setContentsMargins(24, 28, 24, 24)
-        shell.setSpacing(24)
+        self.shell_layout = QHBoxLayout(root)
+        self.shell_layout.setContentsMargins(24, 28, 24, 24)
+        self.shell_layout.setSpacing(24)
 
-        shell.addWidget(self._build_sidebar())
-        shell.addLayout(self._build_main_area(), 1)
+        self.sidebar = self._build_sidebar()
+        self.shell_layout.addWidget(self.sidebar)
+
+        self.content = QWidget()
+        self.content.setObjectName("content")
+        self.content.setMaximumWidth(1240)
+        self.content.setLayout(self._build_main_area())
+        self.shell_layout.addWidget(self.content, 1)
 
         self.input_edit.textChanged.connect(self._on_path_changed)
         self.output_edit.textChanged.connect(self._persist_settings)
@@ -130,56 +141,56 @@ class MainWindow(QMainWindow):
         main = QVBoxLayout()
         main.setSpacing(16)
 
-        header = QHBoxLayout()
+        self.header_layout = QHBoxLayout()
         title_block = QVBoxLayout()
         title_block.setSpacing(8)
         title = QLabel("Wallpaper-Unpacker-GUI")
         title.setObjectName("appTitle")
         title_block.addWidget(title)
-        header.addLayout(title_block, 1)
-        header.addWidget(self._top_action("home", "项目主页", lambda: QDesktopServices.openUrl(QUrl(PROJECT_LINK_URL))))
-        header.addWidget(self._top_action("docs", "使用文档", lambda: QDesktopServices.openUrl(QUrl(DOCS_LINK_URL))))
-        header.addWidget(self._top_action("info", "关于工具", self._show_about))
-        main.addLayout(header)
+        self.header_layout.addLayout(title_block, 1)
+        self.header_layout.addWidget(self._top_action("home", "项目主页", lambda: QDesktopServices.openUrl(QUrl(PROJECT_LINK_URL))))
+        self.header_layout.addWidget(self._top_action("docs", "使用文档", lambda: QDesktopServices.openUrl(QUrl(DOCS_LINK_URL))))
+        self.header_layout.addWidget(self._top_action("info", "关于工具", self._show_about))
+        main.addLayout(self.header_layout)
 
         path_card = self._card("section", "路径与选项")
         path_layout = path_card.layout()
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(20)
-        grid.setColumnStretch(1, 1)
-        path_layout.addLayout(grid)
+        self.path_grid = QGridLayout()
+        self.path_grid.setHorizontalSpacing(14)
+        self.path_grid.setVerticalSpacing(20)
+        self.path_grid.setColumnStretch(1, 1)
+        path_layout.addLayout(self.path_grid)
 
         self.input_edit = QLineEdit(self.settings.get("last_input", ""))
         self.input_edit.setPlaceholderText("请选择或拖拽 .pkg / .tex 文件或文件夹到此处")
         self.output_edit = QLineEdit(self.settings.get("last_output", ""))
         self.output_edit.setPlaceholderText("请选择输出目录")
-        self._add_path_row(grid, 0, "输入路径", self.input_edit, [
+        self._add_path_row(self.path_grid, 0, "输入路径", self.input_edit, [
             ("file", "选文件", self._pick_input_file),
             ("folder", "选文件夹", self._pick_input_dir),
         ])
-        self._add_path_row(grid, 1, "输出目录", self.output_edit, [
+        self._add_path_row(self.path_grid, 1, "输出目录", self.output_edit, [
             ("folder", "选择输出", self._pick_output),
             ("open", "打开输出", self.open_output_dir),
         ])
 
-        option_row = QHBoxLayout()
+        self.option_row = QHBoxLayout()
         self.same_folder_check = QCheckBox("导出结果全部放进同一个文件夹")
         self.same_folder_check.setChecked(bool(self.settings.get("same_folder_output", False)))
         self.same_folder_check.stateChanged.connect(self._same_folder_changed)
         self.auto_open_check = QCheckBox("完成后自动打开输出目录")
         self.auto_open_check.setChecked(bool(self.settings.get("auto_open_output", False)))
         self.auto_open_check.stateChanged.connect(self._auto_open_changed)
-        option_row.addWidget(self.same_folder_check)
-        option_row.addSpacing(32)
-        option_row.addWidget(self.auto_open_check)
-        option_row.addStretch(1)
-        path_layout.addLayout(option_row)
+        self.option_row.addWidget(self.same_folder_check)
+        self.option_row.addSpacing(32)
+        self.option_row.addWidget(self.auto_open_check)
+        self.option_row.addStretch(1)
+        path_layout.addLayout(self.option_row)
 
         main.addWidget(path_card)
 
-        action_row = QHBoxLayout()
-        action_row.setSpacing(14)
+        self.action_row = QHBoxLayout()
+        self.action_row.setSpacing(14)
         self.run_btn = QPushButton(self.text_with_icon("run", "开始导出"))
         self.run_btn.setObjectName("primaryBtn")
         self.run_btn.clicked.connect(self.start_extract)
@@ -191,12 +202,13 @@ class MainWindow(QMainWindow):
         self.clear_btn.clicked.connect(self.clear_log)
         for button in [self.run_btn, self.stop_btn, self.clear_btn]:
             button.setFixedHeight(50)
-            action_row.addWidget(button)
-        action_row.addStretch(1)
+            self.action_row.addWidget(button)
+            self.action_buttons.append(button)
+        self.action_row.addStretch(1)
         self.status_pill = QLabel(self.text_with_icon("status", "就绪"))
         self.status_pill.setObjectName("statusPill")
-        action_row.addWidget(self.status_pill)
-        main.addLayout(action_row)
+        self.action_row.addWidget(self.status_pill)
+        main.addLayout(self.action_row)
 
         progress_card = QFrame()
         progress_card.setObjectName("thinCard")
@@ -286,6 +298,7 @@ class MainWindow(QMainWindow):
         button.setObjectName("topAction")
         button.setFixedSize(112, 88)
         button.clicked.connect(callback)
+        self.top_actions.append(button)
         return button
 
     def _add_path_row(self, grid: QGridLayout, row: int, label_text: str, edit: QLineEdit, buttons: list[tuple[str, str, object]]) -> None:
@@ -295,7 +308,9 @@ class MainWindow(QMainWindow):
         edit.setMinimumHeight(48)
         grid.addWidget(label, row, 0)
         grid.addWidget(edit, row, 1)
+        button_panel = QWidget()
         button_box = QHBoxLayout()
+        button_box.setContentsMargins(0, 0, 0, 0)
         button_box.setSpacing(14)
         for icon_name, text, callback in buttons:
             button = QPushButton(self.text_with_icon(icon_name, text))
@@ -303,7 +318,68 @@ class MainWindow(QMainWindow):
             button.setFixedHeight(48)
             button.clicked.connect(callback)
             button_box.addWidget(button)
-        grid.addLayout(button_box, row, 2)
+            self.path_buttons.append(button)
+        button_panel.setLayout(button_box)
+        grid.addWidget(button_panel, row, 2)
+        self.path_rows.append({"label": label, "edit": edit, "buttons": button_panel})
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_responsive_layout()
+
+    def _update_responsive_layout(self) -> None:
+        width = self.width()
+        compact = width < 920
+        medium = width < 1180
+
+        margin = 12 if compact else 18 if medium else 24
+        spacing = 12 if compact else 16 if medium else 24
+        self.shell_layout.setContentsMargins(margin, margin, margin, margin)
+        self.shell_layout.setSpacing(spacing)
+
+        self.sidebar.setVisible(not compact)
+        if compact:
+            self.content.setMaximumWidth(16777215)
+        else:
+            self.sidebar.setFixedWidth(206 if medium else 228)
+            self.content.setMaximumWidth(1180 if medium else 1240)
+
+        top_width = 88 if compact else 100 if medium else 112
+        top_height = 58 if compact else 72 if medium else 88
+        for button in self.top_actions:
+            button.setFixedSize(top_width, top_height)
+
+        button_height = 42 if compact else 46 if medium else 50
+        for button in self.action_buttons:
+            button.setFixedHeight(button_height)
+        for button in self.path_buttons:
+            button.setFixedHeight(button_height)
+        self.input_edit.setMinimumHeight(button_height)
+        self.output_edit.setMinimumHeight(button_height)
+
+        self.action_row.setSpacing(8 if compact else 12 if medium else 14)
+        self.path_grid.setHorizontalSpacing(8 if compact else 12 if medium else 14)
+        self.path_grid.setVerticalSpacing(10 if compact else 16 if medium else 20)
+
+        if compact:
+            self.path_grid.setColumnStretch(0, 0)
+            self.path_grid.setColumnStretch(1, 1)
+            self.path_grid.setColumnStretch(2, 0)
+            for index, row in enumerate(self.path_rows):
+                base = index * 3
+                self.path_grid.addWidget(row["label"], base, 0, 1, 2)
+                self.path_grid.addWidget(row["edit"], base + 1, 0, 1, 2)
+                self.path_grid.addWidget(row["buttons"], base + 2, 0, 1, 2)
+            self.status_pill.setVisible(False)
+        else:
+            self.path_grid.setColumnStretch(0, 0)
+            self.path_grid.setColumnStretch(1, 1)
+            self.path_grid.setColumnStretch(2, 0)
+            for index, row in enumerate(self.path_rows):
+                self.path_grid.addWidget(row["label"], index, 0)
+                self.path_grid.addWidget(row["edit"], index, 1)
+                self.path_grid.addWidget(row["buttons"], index, 2)
+            self.status_pill.setVisible(True)
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
