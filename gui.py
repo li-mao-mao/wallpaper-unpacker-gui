@@ -31,7 +31,7 @@ from app.local_state import load_settings, save_settings
 
 PROJECT_LINK_URL = "https://github.com/li-mao-mao/wallpaper-unpacker-gui"
 DOCS_LINK_URL = "https://github.com/li-mao-mao/wallpaper-unpacker-gui/blob/main/README_zh.md"
-APP_VERSION = "v1.2.0"
+APP_VERSION = "v1.0.2"
 
 
 def resource_path(name: str) -> Path:
@@ -45,6 +45,57 @@ def load_icons() -> dict[str, str]:
         return json.loads(icon_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+class DropPathLineEdit(QLineEdit):
+    def __init__(
+        self,
+        text: str = "",
+        *,
+        accept_files: bool = True,
+        accept_dirs: bool = True,
+        suffixes: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(text)
+        self.accept_files = accept_files
+        self.accept_dirs = accept_dirs
+        self.suffixes = tuple(suffix.lower() for suffix in suffixes)
+        self.setAcceptDrops(True)
+
+    def _accepted_path(self, event) -> Path | None:
+        if not event.mimeData().hasUrls():
+            return None
+
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            path = Path(url.toLocalFile())
+            if path.is_dir() and self.accept_dirs:
+                return path
+            if path.is_file() and self.accept_files:
+                if not self.suffixes or path.suffix.lower() in self.suffixes:
+                    return path
+        return None
+
+    def dragEnterEvent(self, event) -> None:
+        if self._accepted_path(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        if self._accepted_path(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        path = self._accepted_path(event)
+        if path:
+            self.setText(str(path))
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 class MainWindow(QMainWindow):
@@ -167,9 +218,18 @@ class MainWindow(QMainWindow):
         self.path_grid.setColumnStretch(1, 1)
         path_layout.addLayout(self.path_grid)
 
-        self.input_edit = QLineEdit(self.settings.get("last_input", ""))
+        self.input_edit = DropPathLineEdit(
+            self.settings.get("last_input", ""),
+            accept_files=True,
+            accept_dirs=True,
+            suffixes=(".pkg", ".tex"),
+        )
         self.input_edit.setPlaceholderText("请选择或拖拽 .pkg / .tex 文件或文件夹到此处")
-        self.output_edit = QLineEdit(self.settings.get("last_output", ""))
+        self.output_edit = DropPathLineEdit(
+            self.settings.get("last_output", ""),
+            accept_files=False,
+            accept_dirs=True,
+        )
         self.output_edit.setPlaceholderText("请选择输出目录")
         self._add_path_row(self.path_grid, 0, "输入路径", self.input_edit, [
             ("file", "选文件", self._pick_input_file),
@@ -787,6 +847,7 @@ class MainWindow(QMainWindow):
                 progress_callback=self.progress_queue.put,
                 cancel_requested=lambda: self.cancel_requested,
                 same_folder=same_folder,
+                estimated_total=estimated,
             )
             self.done_queue.put(("done", stats))
         except CancelledError as e:

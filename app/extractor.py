@@ -221,14 +221,11 @@ def export_pkg_file(
         ensure_not_cancelled(cancel_requested)
         entry_label = flatten_path_name(entry.full_path)
         target_base = (out_root / f"{pkg_label}__{entry_label}") if same_folder else (pkg_folder / entry_label)
-        if stats:
-            stats.total += 1
-
         emit_progress(
             progress_callback,
             event="item_start",
-            total=stats.total,
-            processed=stats.processed,
+            total=stats.total if stats else 0,
+            processed=stats.processed if stats else 0,
             detail=entry.full_path,
             source=str(pkg_path),
         )
@@ -271,9 +268,6 @@ def export_tex_file(
     progress_callback: ProgressCallback = None,
     records: Optional[List[RunRecord]] = None,
 ) -> None:
-    if stats:
-        stats.total += 1
-
     emit_progress(
         progress_callback,
         event="item_start",
@@ -348,12 +342,15 @@ def process_input(
     cancel_requested: CancelCheck = None,
     manifest_path: Optional[Path] = None,
     same_folder: bool = False,
+    estimated_total: Optional[int] = None,
 ) -> Stats:
-    stats = Stats()
     records: List[RunRecord] = []
     input_path = input_path.resolve()
     out_root = out_root.resolve()
     out_root.mkdir(parents=True, exist_ok=True)
+    if estimated_total is None:
+        estimated_total = count_exportable_items(input_path)
+    stats = Stats(total=estimated_total)
 
     if input_path.is_file():
         if input_path.suffix.lower() == ".pkg":
