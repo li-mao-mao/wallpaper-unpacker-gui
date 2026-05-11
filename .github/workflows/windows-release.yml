@@ -1,49 +1,90 @@
-name: Build Windows Release
+name: CI and Windows Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
+  ci:
+    name: Python CI
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Compile Python files
+        run: |
+          python -m py_compile main.py gui.py
+          python -m compileall app
+
+  build-windows:
+    name: Build Windows executable
+    runs-on: windows-latest
+    needs: ci
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build with PyInstaller
+      - name: Build Windows app with PyInstaller
         run: |
-          pyinstaller --noconfirm --windowed --name Wallpaper-Unpacker-GUI --add-data "icons.json;." main.py
+          pyinstaller --noconfirm --clean --windowed --name Wallpaper-Unpacker-GUI --add-data "icons.json;." main.py
 
-      - name: Copy release files
+      - name: Copy release documents
         shell: pwsh
         run: |
           Copy-Item README_zh.md dist\Wallpaper-Unpacker-GUI\
           Copy-Item LICENSE dist\Wallpaper-Unpacker-GUI\
 
-      - name: Create zip package
+      - name: Package portable release
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $zip = "Wallpaper-Unpacker-GUI-$tag-windows.zip"
+          $zip = "Wallpaper-Unpacker-GUI-$tag-windows-portable.zip"
           Compress-Archive -Path dist\Wallpaper-Unpacker-GUI\* -DestinationPath $zip -Force
           "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
 
       - name: Publish GitHub Release
         shell: pwsh
@@ -51,4 +92,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.ref_name }}"
-          gh release create $tag $env:ZIP_NAME --title "Wallpaper-Unpacker-GUI $tag" --notes "Windows 版本自动构建发布包。"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "Wallpaper-Unpacker-GUI $tag" --generate-notes
+          }
+          gh release upload $tag $env:ZIP_NAME --clobber
