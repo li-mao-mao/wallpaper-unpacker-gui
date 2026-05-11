@@ -71,11 +71,22 @@ class DropPathLineEdit(QLineEdit):
                 continue
             path = Path(url.toLocalFile())
             if path.is_dir() and self.accept_dirs:
+                if self.suffixes and not self._directory_has_supported_file(path):
+                    continue
                 return path
             if path.is_file() and self.accept_files:
                 if not self.suffixes or path.suffix.lower() in self.suffixes:
                     return path
         return None
+
+    def _directory_has_supported_file(self, path: Path) -> bool:
+        try:
+            return any(
+                child.is_file() and child.suffix.lower() in self.suffixes
+                for child in path.rglob("*")
+            )
+        except OSError:
+            return False
 
     def dragEnterEvent(self, event) -> None:
         if self._accepted_path(event):
@@ -111,7 +122,7 @@ class MainWindow(QMainWindow):
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.done_queue: "queue.Queue[tuple]" = queue.Queue()
         self.progress_queue: "queue.Queue[dict]" = queue.Queue()
-        self.estimate_queue: "queue.Queue[int | str]" = queue.Queue()
+        self.estimate_queue: "queue.Queue[tuple[str, int | str]]" = queue.Queue()
         self.icons = load_icons()
         self.top_actions: list[QPushButton] = []
         self.path_rows: list[dict[str, QWidget]] = []
@@ -649,9 +660,9 @@ class MainWindow(QMainWindow):
             try:
                 source = Path(input_path).expanduser()
                 total = count_exportable_items(source) if source.exists() else 0
-                self.estimate_queue.put(total)
+                self.estimate_queue.put((input_path, total))
             except Exception:
-                self.estimate_queue.put("?")
+                self.estimate_queue.put((input_path, "?"))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -672,9 +683,11 @@ class MainWindow(QMainWindow):
 
         while True:
             try:
-                estimated = self.estimate_queue.get_nowait()
+                estimate_path, estimated = self.estimate_queue.get_nowait()
             except queue.Empty:
                 break
+            if estimate_path != self.input_edit.text().strip():
+                continue
             self.estimated_total_label.setText(str(estimated))
 
         try:
@@ -837,7 +850,7 @@ class MainWindow(QMainWindow):
             out = Path(output_dir)
             out.mkdir(parents=True, exist_ok=True)
             estimated = count_exportable_items(source)
-            self.estimate_queue.put(estimated)
+            self.estimate_queue.put((input_path, estimated))
             self.log_queue.put(f"处理路径：{source}")
             self.log_queue.put(f"预计任务：{estimated}")
             stats = process_input(
