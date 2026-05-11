@@ -61,28 +61,22 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build Windows app with PyInstaller
+      - name: Build single-file Windows app with PyInstaller
         run: |
-          pyinstaller --noconfirm --clean --windowed --name Wallpaper-Unpacker-GUI --add-data "icons.json;." main.py
-
-      - name: Copy release documents
-        shell: pwsh
-        run: |
-          Copy-Item README_zh.md dist\Wallpaper-Unpacker-GUI\
-          Copy-Item LICENSE dist\Wallpaper-Unpacker-GUI\
+          pyinstaller --noconfirm --clean --onefile --windowed --name Wallpaper-Unpacker-GUI --add-data "icons.json;." main.py
 
       - name: Package portable release
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $zip = "Wallpaper-Unpacker-GUI-$tag-windows-portable.zip"
-          Compress-Archive -Path dist\Wallpaper-Unpacker-GUI\* -DestinationPath $zip -Force
+          $zip = "Wallpaper-Unpacker-GUI-$tag-windows-single-exe.zip"
+          Compress-Archive -Path dist\Wallpaper-Unpacker-GUI.exe -DestinationPath $zip -Force
           "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-portable
+          name: windows-single-exe
           path: ${{ env.ZIP_NAME }}
           if-no-files-found: error
 

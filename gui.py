@@ -1,6 +1,7 @@
 import queue
 import threading
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -33,8 +34,13 @@ DOCS_LINK_URL = "https://github.com/li-mao-mao/wallpaper-unpacker-gui/blob/main/
 APP_VERSION = "v1.2.0"
 
 
+def resource_path(name: str) -> Path:
+    base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    return base_dir / name
+
+
 def load_icons() -> dict[str, str]:
-    icon_path = Path(__file__).with_name("icons.json")
+    icon_path = resource_path("icons.json")
     try:
         return json.loads(icon_path.read_text(encoding="utf-8"))
     except Exception:
