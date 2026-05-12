@@ -62,7 +62,7 @@ class DropPathLineEdit(QLineEdit):
         self.suffixes = tuple(suffix.lower() for suffix in suffixes)
         self.setAcceptDrops(True)
 
-    def _accepted_path(self, event) -> Path | None:
+    def _accepted_path(self, event, *, validate_directory: bool = False) -> Path | None:
         if not event.mimeData().hasUrls():
             return None
 
@@ -71,7 +71,7 @@ class DropPathLineEdit(QLineEdit):
                 continue
             path = Path(url.toLocalFile())
             if path.is_dir() and self.accept_dirs:
-                if self.suffixes and not self._directory_has_supported_file(path):
+                if validate_directory and self.suffixes and not self._directory_has_supported_file(path):
                     continue
                 return path
             if path.is_file() and self.accept_files:
@@ -101,7 +101,7 @@ class DropPathLineEdit(QLineEdit):
             event.ignore()
 
     def dropEvent(self, event) -> None:
-        path = self._accepted_path(event)
+        path = self._accepted_path(event, validate_directory=True)
         if path:
             self.setText(str(path))
             event.acceptProposedAction()
@@ -136,6 +136,10 @@ class MainWindow(QMainWindow):
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self._poll_queues)
         self.poll_timer.start(80)
+
+        self.estimate_debounce_timer = QTimer(self)
+        self.estimate_debounce_timer.setSingleShot(True)
+        self.estimate_debounce_timer.timeout.connect(lambda: self._refresh_estimate_async(silent=True))
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -628,7 +632,7 @@ class MainWindow(QMainWindow):
 
     def _on_path_changed(self) -> None:
         self._persist_settings()
-        self._refresh_estimate_async(silent=True)
+        self.estimate_debounce_timer.start(400)
 
     def _persist_settings(self) -> None:
         save_settings(

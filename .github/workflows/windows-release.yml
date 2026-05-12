@@ -10,6 +10,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: Artifact name suffix for manual builds
+        required: false
+        default: manual
 
 permissions:
   contents: write
@@ -43,7 +48,7 @@ jobs:
     name: Build Windows executable
     runs-on: windows-latest
     needs: ci
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
@@ -68,8 +73,13 @@ jobs:
       - name: Package portable release
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $zip = "Wallpaper-Unpacker-GUI-$tag-windows-single-exe.zip"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $suffix = "${{ github.event.inputs.artifact_name }}"
+            $zip = "Wallpaper-Unpacker-GUI-$suffix-windows-single-exe.zip"
+          } else {
+            $tag = "${{ github.ref_name }}"
+            $zip = "Wallpaper-Unpacker-GUI-$tag-windows-single-exe.zip"
+          }
           Compress-Archive -Path dist\Wallpaper-Unpacker-GUI.exe -DestinationPath $zip -Force
           "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -81,6 +91,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
