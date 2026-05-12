@@ -1,5 +1,5 @@
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional
@@ -19,6 +19,7 @@ class Stats:
     success: int = 0
     skipped: int = 0
     failed: int = 0
+    failed_items: List[str] = field(default_factory=list)
 
     @property
     def processed(self) -> int:
@@ -245,6 +246,7 @@ def export_pkg_file(
         except Exception as e:
             if stats:
                 stats.failed += 1
+                stats.failed_items.append(f"{pkg_path.name}:{entry.full_path} | {e}")
             if records is not None:
                 records.append(RunRecord(source=f"{pkg_path.name}:{entry.full_path}", target="", status="failed", category="PKG", detail=str(e)))
             log(logger, f"[失败][PKG] {pkg_path.name} -> {entry.full_path} | {e}")
@@ -292,6 +294,7 @@ def export_tex_file(
     except Exception as e:
         if stats:
             stats.failed += 1
+            stats.failed_items.append(f"{tex_path} | {e}")
         if records is not None:
             records.append(RunRecord(source=str(tex_path), target="", status="failed", category="TEX", detail=str(e)))
         log(logger, f"[失败][TEX] {tex_path} | {e}")

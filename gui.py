@@ -132,6 +132,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._apply_styles()
         self._update_responsive_layout()
+        self._set_running_state(False)
 
         self.poll_timer = QTimer(self)
         self.poll_timer.timeout.connect(self._poll_queues)
@@ -632,7 +633,19 @@ class MainWindow(QMainWindow):
 
     def _on_path_changed(self) -> None:
         self._persist_settings()
+        self.estimated_total_label.setText("..." if self.input_edit.text().strip() else "0")
         self.estimate_debounce_timer.start(400)
+
+    def _set_running_state(self, running: bool) -> None:
+        self.run_btn.setEnabled(not running)
+        self.stop_btn.setEnabled(running)
+        self.clear_btn.setEnabled(not running)
+        self.input_edit.setEnabled(not running)
+        self.output_edit.setEnabled(not running)
+        self.same_folder_check.setEnabled(not running)
+        self.auto_open_check.setEnabled(not running)
+        for button in self.path_buttons:
+            button.setEnabled(not running)
 
     def _persist_settings(self) -> None:
         save_settings(
@@ -715,6 +728,7 @@ class MainWindow(QMainWindow):
             self.last_run_label.setText(now)
             self._persist_settings()
             self._append_log(f"处理完成。总计:{stats.total} 成功:{stats.success} 跳过:{stats.skipped} 失败:{stats.failed}")
+            self._show_completion_summary(stats)
             if self.settings.get("auto_open_output", False):
                 self.open_output_dir()
         elif kind == "cancelled":
@@ -746,6 +760,23 @@ class MainWindow(QMainWindow):
     def _append_log(self, text: str) -> None:
         self.log_text.appendPlainText(text)
         self.log_text.verticalScrollBar().setValue(self.log_text.verticalScrollBar().maximum())
+
+    def _show_completion_summary(self, stats) -> None:
+        summary = (
+            f"总计：{stats.total}\n"
+            f"成功：{stats.success}\n"
+            f"跳过：{stats.skipped}\n"
+            f"失败：{stats.failed}"
+        )
+        if stats.failed:
+            failed_lines = "\n".join(stats.failed_items[:8])
+            omitted = max(0, len(stats.failed_items) - 8)
+            detail = f"\n\n失败项：\n{failed_lines}"
+            if omitted:
+                detail += f"\n... 另有 {omitted} 项，请查看日志。"
+            QMessageBox.warning(self, "导出完成（含失败）", summary + detail)
+            return
+        QMessageBox.information(self, "导出完成", summary)
 
     def clear_log(self) -> None:
         if self.running:
@@ -819,6 +850,7 @@ class MainWindow(QMainWindow):
         self.cancel_requested = True
         self.status_label.setText("正在停止...")
         self.status_pill.setText(self.text_with_icon("status", "停止中"))
+        self.stop_btn.setEnabled(False)
         self._append_log("已请求停止，等待当前文件处理结束...")
 
     def start_extract(self) -> None:
@@ -839,6 +871,7 @@ class MainWindow(QMainWindow):
         self.clear_log()
         self.cancel_requested = False
         self.running = True
+        self._set_running_state(True)
         self.status_label.setText("正在运行...")
         self.status_pill.setText(self.text_with_icon("status", "运行中"))
         self.progress_bar.setValue(0)
@@ -875,6 +908,7 @@ class MainWindow(QMainWindow):
     def _finish_extract(self) -> None:
         self.running = False
         self.cancel_requested = False
+        self._set_running_state(False)
 
 
 def launch() -> None:
